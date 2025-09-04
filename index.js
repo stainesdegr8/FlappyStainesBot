@@ -3,71 +3,34 @@ import { Telegraf } from "telegraf";
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const GAME_SHORT_NAME = "VoteForStaines";
-const GAME_URL_BASE  = "https://stainesdegr8.github.io/VOTEFORSTAINES/";
+const GAME_URL = "https://stainesdegr8.github.io/VOTEFORSTAINES/"; // no query params
 
 if (!BOT_TOKEN) { console.error("BOT_TOKEN not set"); process.exit(1); }
 
-const bot = new Telegraf(BOT_TOKEN);
+// Tiny HTTP server so Railway stays happy
 const app = express();
-app.use(express.json());
+app.get("/", (_req, res) => res.send("FlappyStainesBot OK"));
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log(`HTTP listening on :${PORT}`));
 
-// allow game page to call us
-app.use((req,res,next)=>{
-  res.setHeader("Access-Control-Allow-Origin","*");
-  res.setHeader("Access-Control-Allow-Headers","Content-Type");
-  if (req.method==="OPTIONS") return res.sendStatus(204);
-  next();
-});
+// Telegram bot: only launches the game, nothing else
+const bot = new Telegraf(BOT_TOKEN);
 
 // DM: /start shows the game card
-bot.start((ctx)=>ctx.replyWithGame(GAME_SHORT_NAME));
+bot.start((ctx) => ctx.replyWithGame(GAME_SHORT_NAME));
 
-// GROUPS: /play posts the game card into the group
-bot.command('play', (ctx) => ctx.replyWithGame(GAME_SHORT_NAME));
+// Groups: /play posts the game card (optional, keep if you like)
+bot.command("play", (ctx) => ctx.replyWithGame(GAME_SHORT_NAME));
 
-// When user taps Play, send game URL with IDs we need for setGameScore
-bot.on("callback_query", async (ctx)=>{
+// When user taps Play, open your static game URL
+bot.on("callback_query", (ctx) => {
   const cq = ctx.callbackQuery;
-  if (cq.game_short_name !== GAME_SHORT_NAME) return ctx.answerCbQuery();
-
-  const u = cq.from.id;
-  const p = new URLSearchParams({ u: String(u) });
-
-  if (cq.inline_message_id) {
-    p.set("i", cq.inline_message_id);                 // inline message
-  } else if (cq.message) {
-    p.set("c", String(cq.message.chat.id));           // normal message
-    p.set("m", String(cq.message.message_id));
+  if (cq.game_short_name === GAME_SHORT_NAME) {
+    return ctx.answerGameQuery(GAME_URL);
   }
-
-  const url = `${GAME_URL_BASE}?${p.toString()}`;
-  await ctx.answerGameQuery(url);
+  return ctx.answerCbQuery();
 });
 
-// Game calls this to auto-set score (no popup)
-app.post("/setscore", async (req, res) => {
-  try {
-    const { score, u, c, m, i } = req.body || {};
-    if (score === undefined || u === undefined) {
-      return res.status(400).json({ ok:false, error:"Missing score or u" });
-    }
-    const opts = i ? { inline_message_id: i } : { chat_id: Number(c), message_id: Number(m) };
-    const result = await bot.telegram.setGameScore(Number(u), Number(score), {
-      ...opts, force: true, disable_edit_message: false
-    });
-    res.json({ ok:true, result });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ ok:false, error: e.message });
-  }
-});
-
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, async ()=>{
-  console.log(`HTTP listening on :${PORT}`);
-  await bot.launch();
-  console.log("Bot polling started");
-});
-
-process.once("SIGINT", ()=>bot.stop("SIGINT"));
-process.once("SIGTERM", ()=>bot.stop("SIGTERM"));
+bot.launch().then(() => console.log("Bot polling started"));
+process.once("SIGINT", () => bot.stop("SIGINT"));
+process.once("SIGTERM", () => bot.stop("SIGTERM"));
