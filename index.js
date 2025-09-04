@@ -19,10 +19,13 @@ app.use((req,res,next)=>{
   next();
 });
 
-// /start -> show game card
+// DM: /start shows the game card
 bot.start((ctx)=>ctx.replyWithGame(GAME_SHORT_NAME));
 
-// When user taps Play, send game URL with IDs we need to set score later
+// GROUPS: /play posts the game card into the group
+bot.command('play', (ctx) => ctx.replyWithGame(GAME_SHORT_NAME));
+
+// When user taps Play, send game URL with IDs we need for setGameScore
 bot.on("callback_query", async (ctx)=>{
   const cq = ctx.callbackQuery;
   if (cq.game_short_name !== GAME_SHORT_NAME) return ctx.answerCbQuery();
@@ -31,9 +34,9 @@ bot.on("callback_query", async (ctx)=>{
   const p = new URLSearchParams({ u: String(u) });
 
   if (cq.inline_message_id) {
-    p.set("i", cq.inline_message_id);
+    p.set("i", cq.inline_message_id);                 // inline message
   } else if (cq.message) {
-    p.set("c", String(cq.message.chat.id));
+    p.set("c", String(cq.message.chat.id));           // normal message
     p.set("m", String(cq.message.message_id));
   }
 
